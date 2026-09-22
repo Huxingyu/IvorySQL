@@ -86,10 +86,22 @@ DROP FUNCTION IF EXISTS FUNC_WITH_DEFAULT;
 -- Oracle dynamic views
 \d SYS.V$SESSION
 \d SYS.V$PROCESS
-SELECT * 
-FROM SYS.V$PARAMETER 
+SELECT *
+FROM SYS.V$PARAMETER
 WHERE NAME IN ('listen_addresses','application_name','archive_command','archive_mode','block_size')
 ORDER BY NAME;
+
+\d SYS.V$MYSTAT
+SELECT * FROM SYS.V$STATNAME ORDER BY STATISTIC#;
+-- V$MYSTAT values are backend-cumulative counters, so only their sign is
+-- deterministic; join them to V$STATNAME by NAME, the usual Oracle idiom.
+SELECT
+    (SELECT VALUE FROM SYS.V$MYSTAT a, SYS.V$STATNAME b
+     WHERE a.STATISTIC# = b.STATISTIC# AND b.NAME = 'redo size') >= 0 AS redo_size_nonneg,
+    (SELECT VALUE FROM SYS.V$MYSTAT a, SYS.V$STATNAME b
+     WHERE a.STATISTIC# = b.STATISTIC# AND b.NAME = 'session logical reads') >= 0 AS logical_reads_nonneg,
+    (SELECT VALUE FROM SYS.V$MYSTAT a, SYS.V$STATNAME b
+     WHERE a.STATISTIC# = b.STATISTIC# AND b.NAME = 'physical reads') >= 0 AS physical_reads_nonneg;
 
 CREATE TABLE t_pk_single (id NUMBER PRIMARY KEY, name VARCHAR2(50));
 CREATE TABLE t_pk_composite (id1 NUMBER, id2 NUMBER, CONSTRAINT pk_composite PRIMARY KEY (id1, id2));

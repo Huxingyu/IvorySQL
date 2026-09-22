@@ -1273,6 +1273,43 @@ SELECT
     SHORT_DESC::VARCHAR2(255) AS DESCRIPTION
 FROM PG_SETTINGS;
 
+-- V$STATNAME / V$MYSTAT: Oracle session statistics views.
+--
+-- Oracle keeps a single STATISTIC# registry shared by V$STATNAME (the
+-- name dictionary) and V$MYSTAT (the current session's values). Postgres
+-- has no equivalent registry, so the STATISTIC# values here are our own
+-- and only meaningful for joining V$MYSTAT to V$STATNAME; callers are
+-- expected to look statistics up by NAME, as Oracle code conventionally
+-- does (see the two views' typical join usage below).
+CREATE OR REPLACE VIEW SYS.V$STATNAME AS
+SELECT
+    STATISTIC#::NUMBER,
+    NAME::VARCHAR2(64),
+    CLASS::NUMBER
+FROM (VALUES
+    (1, 'redo size', 1),
+    (2, 'session logical reads', 1),
+    (3, 'physical reads', 1)
+) AS t(STATISTIC#, NAME, CLASS);
+
+-- session logical/physical reads are summed across all relation I/O
+-- contexts reported for this backend by pg_stat_get_backend_io().
+CREATE OR REPLACE VIEW SYS.V$MYSTAT AS
+SELECT
+    n.STATISTIC#,
+    CASE n.NAME
+        WHEN 'redo size' THEN
+            (SELECT COALESCE(SUM(wal_bytes), 0)
+             FROM pg_stat_get_backend_wal(pg_backend_pid()))
+        WHEN 'session logical reads' THEN
+            (SELECT COALESCE(SUM(hits) + SUM(reads), 0)
+             FROM pg_stat_get_backend_io(pg_backend_pid()))
+        WHEN 'physical reads' THEN
+            (SELECT COALESCE(SUM(reads), 0)
+             FROM pg_stat_get_backend_io(pg_backend_pid()))
+    END::NUMBER AS VALUE
+FROM SYS.V$STATNAME n;
+
 CREATE OR REPLACE VIEW SYS.all_cons_columns AS
 SELECT
     SYS.ORA_CASE_TRANS(pg_authid.rolname::VARCHAR2(128))    AS owner,

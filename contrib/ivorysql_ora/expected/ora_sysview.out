@@ -181,6 +181,35 @@ ORDER BY NAME;
  listen_addresses | 2    |                        | localhost     | FALSE     | FALSE            | FALSE            | Sets the host name or IP address(es) to listen to.
 (5 rows)
 
+\d SYS.V$MYSTAT
+                 View "sys.v$mystat"
+   Column   |  Type  | Collation | Nullable | Default 
+------------+--------+-----------+----------+---------
+ statistic# | number |           |          | 
+ value      | number |           |          | 
+
+SELECT * FROM SYS.V$STATNAME ORDER BY STATISTIC#;
+ statistic# |         name          | class 
+------------+-----------------------+-------
+ 1          | redo size             | 1
+ 2          | session logical reads | 1
+ 3          | physical reads        | 1
+(3 rows)
+
+-- V$MYSTAT values are backend-cumulative counters, so only their sign is
+-- deterministic; join them to V$STATNAME by NAME, the usual Oracle idiom.
+SELECT
+    (SELECT VALUE FROM SYS.V$MYSTAT a, SYS.V$STATNAME b
+     WHERE a.STATISTIC# = b.STATISTIC# AND b.NAME = 'redo size') >= 0 AS redo_size_nonneg,
+    (SELECT VALUE FROM SYS.V$MYSTAT a, SYS.V$STATNAME b
+     WHERE a.STATISTIC# = b.STATISTIC# AND b.NAME = 'session logical reads') >= 0 AS logical_reads_nonneg,
+    (SELECT VALUE FROM SYS.V$MYSTAT a, SYS.V$STATNAME b
+     WHERE a.STATISTIC# = b.STATISTIC# AND b.NAME = 'physical reads') >= 0 AS physical_reads_nonneg;
+ redo_size_nonneg | logical_reads_nonneg | physical_reads_nonneg 
+------------------+----------------------+-----------------------
+ t                | t                    | t
+(1 row)
+
 CREATE TABLE t_pk_single (id NUMBER PRIMARY KEY, name VARCHAR2(50));
 CREATE TABLE t_pk_composite (id1 NUMBER, id2 NUMBER, CONSTRAINT pk_composite PRIMARY KEY (id1, id2));
 CREATE TABLE t_unique (col1 INT, col2 VARCHAR2(20), CONSTRAINT uk_col1 UNIQUE (col1));
